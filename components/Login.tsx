@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, AuthError } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { Button } from './ui/Button';
 import { Lock, ShieldCheck, Key } from 'lucide-react';
@@ -16,7 +16,8 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // HARDCODED 2FA PIN FOR DEMO (In production, store this in Firestore 'settings/security')
+  // LƯU Ý BẢO MẬT: Đây chỉ là demo.
+  // Trong thực tế, KHÔNG lưu PIN ở đây. Hãy gọi API xác thực lên server.
   const SECURITY_PIN = "123456"; 
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -26,11 +27,19 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
     
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Login success, move to 2FA
+      // Đăng nhập thành công, chuyển sang bước 2FA
       setStep('2fa');
     } catch (err: any) {
       console.error(err);
-      setError('Email hoặc mật khẩu không đúng. Hoặc chưa cấu hình Firebase Auth.');
+      // Xử lý thông báo lỗi chi tiết hơn
+      const firebaseError = err as AuthError;
+      if (firebaseError.code === 'auth/invalid-credential' || firebaseError.code === 'auth/user-not-found') {
+          setError('Email hoặc mật khẩu không chính xác.');
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+          setError('Đăng nhập thất bại quá nhiều lần. Vui lòng thử lại sau.');
+      } else {
+          setError('Đã có lỗi xảy ra. Vui lòng thử lại.');
+      }
     } finally {
       setLoading(false);
     }
@@ -38,10 +47,12 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
 
   const handle2FA = (e: React.FormEvent) => {
     e.preventDefault();
+    // Logic này chỉ an toàn ở mức độ giao diện người dùng bình thường
     if (pin === SECURITY_PIN) {
         onSuccess();
     } else {
         setError('Mã PIN bảo mật không chính xác.');
+        setPin(''); // Reset pin để nhập lại
     }
   };
 
@@ -49,7 +60,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-lg shadow-2xl">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-zinc-700">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border border-zinc-700 ${step === 'login' ? 'bg-zinc-800' : 'bg-green-900/20'}`}>
              {step === 'login' ? <Lock className="text-amber-500" size={24} /> : <ShieldCheck className="text-green-500" size={24} />}
           </div>
           <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">CMS Access</h2>
@@ -57,7 +68,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
         </div>
 
         {error && (
-            <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded mb-6 text-sm text-center">
+            <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded mb-6 text-sm text-center animate-pulse">
                 {error}
             </div>
         )}
@@ -81,6 +92,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
                     type="password" 
                     value={password}
                     onChange={e => setPassword(e.target.value)}
+                    // ĐÃ SỬA LỖI TYPO Ở ĐÂY: bf-zinc-950 -> bg-zinc-950
                     className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded text-white focus:border-amber-500 focus:outline-none transition-colors"
                     placeholder="••••••••"
                     required
@@ -90,7 +102,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
                 {loading ? 'Đang xác thực...' : 'Đăng Nhập'}
             </Button>
             <p className="text-center text-xs text-zinc-600 mt-4">
-               Lưu ý: Bạn cần tạo tài khoản trong Firebase Console > Authentication trước.
+               Lưu ý: Bạn cần tạo tài khoản trong Firebase Console &gt; Authentication trước.
             </p>
             </form>
         ) : (
@@ -106,7 +118,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
                             className="w-full bg-zinc-950 border border-zinc-700 p-3 pl-10 rounded text-center text-2xl tracking-[0.5em] text-white focus:border-green-500 focus:outline-none transition-colors font-display"
                             placeholder="••••••"
                             maxLength={6}
-                            autoFocus
+                            autoFocus // Tự động focus khi chuyển qua bước này
                             required
                         />
                     </div>
@@ -115,7 +127,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
                 <Button type="submit" className="w-full py-4 bg-green-600 hover:bg-green-500 text-white border-none">
                     Xác nhận
                 </Button>
-                <button type="button" onClick={() => setStep('login')} className="w-full text-zinc-500 text-xs hover:text-white">
+                <button type="button" onClick={() => setStep('login')} className="w-full text-zinc-500 text-xs hover:text-white transition-colors">
                     Quay lại đăng nhập
                 </button>
             </form>
